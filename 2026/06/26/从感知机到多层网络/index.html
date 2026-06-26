@@ -1,0 +1,576 @@
+<!DOCTYPE html><html lang="zh-CN" data-theme="light"><head><meta charset="UTF-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width, initial-scale=1.0,viewport-fit=cover"><title>第一章/第二章 从感知机到多层网络 | Ashley's Notebook</title><meta name="author" content="Ashley"><meta name="copyright" content="Ashley"><meta name="format-detection" content="telephone=no"><meta name="theme-color" content="#ffffff"><meta name="description" content="第一章&#x2F;第二章 从感知机到多层网络：手动实现反向传播的旅程引言这篇博客记录了一次”从零实现”的学习旅程。目标不是调库跑通一个模型，而是沿着深度学习的历史脉络，亲手还原每一个时代的代表性结构——从 1958 年的感知机开始，到 1986 年的多层感知机与反向传播。 在这个过程中，你会遇到真实的 bug、陷入局部最优、踩进初始化的陷阱，然后真正理解为什么现代深度学习框架要那样设计损失函数和初">
+<meta property="og:type" content="article">
+<meta property="og:title" content="第一章&#x2F;第二章 从感知机到多层网络">
+<meta property="og:url" content="https://ashleyduo.github.io/2026/06/26/%E4%BB%8E%E6%84%9F%E7%9F%A5%E6%9C%BA%E5%88%B0%E5%A4%9A%E5%B1%82%E7%BD%91%E7%BB%9C/index.html">
+<meta property="og:site_name" content="Ashley&#39;s Notebook">
+<meta property="og:description" content="第一章&#x2F;第二章 从感知机到多层网络：手动实现反向传播的旅程引言这篇博客记录了一次”从零实现”的学习旅程。目标不是调库跑通一个模型，而是沿着深度学习的历史脉络，亲手还原每一个时代的代表性结构——从 1958 年的感知机开始，到 1986 年的多层感知机与反向传播。 在这个过程中，你会遇到真实的 bug、陷入局部最优、踩进初始化的陷阱，然后真正理解为什么现代深度学习框架要那样设计损失函数和初">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://ashleyduo.github.io/img/butterfly-icon.png">
+<meta property="article:published_time" content="2026-06-26T14:59:46.000Z">
+<meta property="article:modified_time" content="2026-06-26T15:06:54.875Z">
+<meta property="article:author" content="Ashley">
+<meta property="article:tag" content="感知机，激活函数，损失函数">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://ashleyduo.github.io/img/butterfly-icon.png"><script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "第一章/第二章 从感知机到多层网络",
+  "url": "https://ashleyduo.github.io/2026/06/26/%E4%BB%8E%E6%84%9F%E7%9F%A5%E6%9C%BA%E5%88%B0%E5%A4%9A%E5%B1%82%E7%BD%91%E7%BB%9C/",
+  "image": "https://ashleyduo.github.io/img/butterfly-icon.png",
+  "datePublished": "2026-06-26T14:59:46.000Z",
+  "dateModified": "2026-06-26T15:06:54.875Z",
+  "author": [
+    {
+      "@type": "Person",
+      "name": "Ashley",
+      "url": "https://ashleyduo.github.io"
+    }
+  ]
+}</script><link rel="shortcut icon" href="/img/favicon.png"><link rel="canonical" href="https://ashleyduo.github.io/2026/06/26/%E4%BB%8E%E6%84%9F%E7%9F%A5%E6%9C%BA%E5%88%B0%E5%A4%9A%E5%B1%82%E7%BD%91%E7%BB%9C/index.html"><link rel="preconnect" href="//cdn.jsdelivr.net"/><link rel="preconnect" href="//busuanzi.ibruce.info"/><link rel="stylesheet" href="/css/index.css?v=5.5.5"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/css/all.min.css"><script>
+    (() => {
+      
+    const saveToLocal = {
+      set: (key, value, ttl) => {
+        if (!ttl) return
+        const expiry = Date.now() + ttl * 86400000
+        localStorage.setItem(key, JSON.stringify({ value, expiry }))
+      },
+      get: key => {
+        const itemStr = localStorage.getItem(key)
+        if (!itemStr) return undefined
+        const { value, expiry } = JSON.parse(itemStr)
+        if (Date.now() > expiry) {
+          localStorage.removeItem(key)
+          return undefined
+        }
+        return value
+      }
+    }
+
+    window.btf = {
+      saveToLocal,
+      getScript: (url, attr = {}) => new Promise((resolve, reject) => {
+        const script = document.createElement('script')
+        script.src = url
+        script.async = true
+        Object.entries(attr).forEach(([key, val]) => script.setAttribute(key, val))
+        script.onload = script.onreadystatechange = () => {
+          if (!script.readyState || /loaded|complete/.test(script.readyState)) resolve()
+        }
+        script.onerror = reject
+        document.head.appendChild(script)
+      }),
+      getCSS: (url, id) => new Promise((resolve, reject) => {
+        const link = document.createElement('link')
+        link.rel = 'stylesheet'
+        link.href = url
+        if (id) link.id = id
+        link.onload = link.onreadystatechange = () => {
+          if (!link.readyState || /loaded|complete/.test(link.readyState)) resolve()
+        }
+        link.onerror = reject
+        document.head.appendChild(link)
+      }),
+      addGlobalFn: (key, fn, name = false, parent = window) => {
+        if (!false && key.startsWith('pjax')) return
+        const globalFn = parent.globalFn || {}
+        globalFn[key] = globalFn[key] || {}
+        globalFn[key][name || Object.keys(globalFn[key]).length] = fn
+        parent.globalFn = globalFn
+      }
+    }
+  
+      
+      const activateDarkMode = () => {
+        document.documentElement.setAttribute('data-theme', 'dark')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#0d0d0d')
+        }
+      }
+      const activateLightMode = () => {
+        document.documentElement.setAttribute('data-theme', 'light')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#ffffff')
+        }
+      }
+
+      btf.activateDarkMode = activateDarkMode
+      btf.activateLightMode = activateLightMode
+
+      const theme = saveToLocal.get('theme')
+    
+          theme === 'dark' ? activateDarkMode() : theme === 'light' ? activateLightMode() : null
+        
+      
+      const asideStatus = saveToLocal.get('aside-status')
+      if (asideStatus !== undefined) {
+        document.documentElement.classList.toggle('hide-aside', asideStatus === 'hide')
+      }
+    
+      
+    const detectApple = () => {
+      if (/iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent)) {
+        document.documentElement.classList.add('apple')
+      }
+    }
+    detectApple()
+  
+    })()
+  </script><script>const GLOBAL_CONFIG = {
+  root: '/',
+  algolia: undefined,
+  localSearch: undefined,
+  translate: undefined,
+  highlight: {"plugin":"highlight.js","highlightCopy":true,"highlightLang":true,"highlightHeightLimit":false,"highlightFullpage":false,"highlightMacStyle":false},
+  copy: {
+    success: '复制成功',
+    error: '复制失败',
+    noSupport: '浏览器不支持'
+  },
+  relativeDate: {
+    homepage: false,
+    post: false
+  },
+  runtime: '',
+  dateSuffix: {
+    just: '刚刚',
+    min: '分钟前',
+    hour: '小时前',
+    day: '天前',
+    month: '个月前'
+  },
+  copyright: undefined,
+  lightbox: 'null',
+  Snackbar: undefined,
+  infinitegrid: {
+    js: 'https://cdn.jsdelivr.net/npm/@egjs/infinitegrid@4.13.0/dist/infinitegrid.min.js',
+    buttonText: '加载更多'
+  },
+  isPhotoFigcaption: false,
+  islazyloadPlugin: false,
+  isAnchor: false,
+  percent: {
+    toc: true,
+    rightside: false,
+  },
+  autoDarkmode: false
+}</script><script id="config-diff">var GLOBAL_CONFIG_SITE = {
+  title: '第一章/第二章 从感知机到多层网络',
+  isHighlightShrink: false,
+  isToc: true,
+  pageType: 'post'
+}</script><meta name="generator" content="Hexo 8.1.2"></head><body><div id="sidebar"><div id="menu-mask"></div><div id="sidebar-menus"><div class="avatar-img text-center"><img src="/img/butterfly-icon.png" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><div class="site-data text-center"><a href="/archives/"><div class="headline">文章</div><div class="length-num">7</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">12</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">2</div></a></div><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> 首页</span></a></div><div class="menus_item"><a class="site-page" href="/categories/%E9%A1%B9%E7%9B%AE%E7%AC%94%E8%AE%B0/"><i class="fa-fw fas fa-folder"></i><span> 项目笔记</span></a></div><div class="menus_item"><a class="site-page" href="/categories/%E6%8A%80%E6%9C%AF%E6%96%87%E6%A1%A3/"><i class="fa-fw fas fa-code"></i><span> 技术文章</span></a></div><div class="menus_item"><a class="site-page" href="/categories/%E7%94%9F%E6%B4%BB%E9%9A%8F%E7%AC%94/"><i class="fa-fw fas fa-feather"></i><span> 生活随笔</span></a></div><div class="menus_item"><a class="site-page" href="/categories/D%E8%80%81%E5%B8%88%E7%9A%84%E6%95%99%E8%AF%B2"><i class="fa-fw fas fa-water"></i><span> D老师的教诲</span></a></div></div></div></div><div class="post" id="body-wrap"><header class="post-bg" id="page-header"><nav id="nav"><span id="blog-info"><a class="nav-site-title" href="/"><span class="site-name">Ashley's Notebook</span></a><a class="nav-page-title" href="/"><span class="site-name">第一章/第二章 从感知机到多层网络</span><span class="site-name"><i class="fa-solid fa-circle-arrow-left"></i><span>  返回首页</span></span></a></span><div id="menus"><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> 首页</span></a></div><div class="menus_item"><a class="site-page" href="/categories/%E9%A1%B9%E7%9B%AE%E7%AC%94%E8%AE%B0/"><i class="fa-fw fas fa-folder"></i><span> 项目笔记</span></a></div><div class="menus_item"><a class="site-page" href="/categories/%E6%8A%80%E6%9C%AF%E6%96%87%E6%A1%A3/"><i class="fa-fw fas fa-code"></i><span> 技术文章</span></a></div><div class="menus_item"><a class="site-page" href="/categories/%E7%94%9F%E6%B4%BB%E9%9A%8F%E7%AC%94/"><i class="fa-fw fas fa-feather"></i><span> 生活随笔</span></a></div><div class="menus_item"><a class="site-page" href="/categories/D%E8%80%81%E5%B8%88%E7%9A%84%E6%95%99%E8%AF%B2"><i class="fa-fw fas fa-water"></i><span> D老师的教诲</span></a></div></div><div id="toggle-menu"><span class="site-page"><i class="fas fa-bars fa-fw"></i></span></div></div></nav><div id="post-info"><h1 class="post-title">第一章/第二章 从感知机到多层网络</h1><div id="post-meta"><div class="meta-firstline"><span class="post-meta-date"><i class="far fa-calendar-alt fa-fw post-meta-icon"></i><span class="post-meta-label">发表于</span><time class="post-meta-date-created" datetime="2026-06-26T14:59:46.000Z" title="发表于 2026-06-26 22:59:46">2026-06-26</time><span class="post-meta-separator">|</span><i class="fas fa-history fa-fw post-meta-icon"></i><span class="post-meta-label">更新于</span><time class="post-meta-date-updated" datetime="2026-06-26T15:06:54.875Z" title="更新于 2026-06-26 23:06:54">2026-06-26</time></span><span class="post-meta-categories"><span class="post-meta-separator">|</span><i class="fas fa-inbox fa-fw post-meta-icon"></i><a class="post-meta-categories" href="/categories/%E6%8A%80%E6%9C%AF%E6%96%87%E6%A1%A3/">技术文档</a></span></div><div class="meta-secondline"><span class="post-meta-separator">|</span><span class="post-meta-pv-cv" id="" data-flag-title=""><i class="far fa-eye fa-fw post-meta-icon"></i><span class="post-meta-label">浏览量:</span><span id="busuanzi_value_page_pv"><i class="fa-solid fa-spinner fa-spin"></i></span></span></div></div></div></header><main class="layout" id="content-inner"><div id="post"><article class="container post-content" id="article-container"><h1 id="第一章-第二章-从感知机到多层网络：手动实现反向传播的旅程"><a href="#第一章-第二章-从感知机到多层网络：手动实现反向传播的旅程" class="headerlink" title="第一章&#x2F;第二章 从感知机到多层网络：手动实现反向传播的旅程"></a>第一章&#x2F;第二章 从感知机到多层网络：手动实现反向传播的旅程</h1><h2 id="引言"><a href="#引言" class="headerlink" title="引言"></a>引言</h2><p>这篇博客记录了一次”从零实现”的学习旅程。目标不是调库跑通一个模型，而是沿着深度学习的历史脉络，亲手还原每一个时代的代表性结构——从 1958 年的感知机开始，到 1986 年的多层感知机与反向传播。</p>
+<p>在这个过程中，你会遇到真实的 bug、陷入局部最优、踩进初始化的陷阱，然后真正理解为什么现代深度学习框架要那样设计损失函数和初始化策略。这些经验不是读论文能获得的——它们来自亲手写代码、调试、观察 Loss 曲线、然后恍然大悟。</p>
+<hr>
+<h2 id="第一章-·-感知机：一切的起点"><a href="#第一章-·-感知机：一切的起点" class="headerlink" title="第一章 · 感知机：一切的起点"></a>第一章 · 感知机：一切的起点</h2><h3 id="神经元即线性二分类器"><a href="#神经元即线性二分类器" class="headerlink" title="神经元即线性二分类器"></a>神经元即线性二分类器</h3><p>感知机是深度学习最质朴的出发点。它做的事情极其简单：输入一组特征，乘以权重，加上偏置，过阶跃函数，输出 0 或 1。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">y = sign(w·x + b)</span><br></pre></td></tr></table></figure>
+
+<p>如果把输入特征画在二维平面上，感知机的决策边界就是一条直线：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">w₁x₁ + w₂x₂ + b = 0</span><br></pre></td></tr></table></figure>
+
+<p>直线一侧是类别 1，另一侧是类别 0。</p>
+<h3 id="学习规则：犯错才改"><a href="#学习规则：犯错才改" class="headerlink" title="学习规则：犯错才改"></a>学习规则：犯错才改</h3><p>感知机的训练规则简洁到令人愉悦：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">w := w + η · (y_true - y_pred) · x</span><br><span class="line">b := b + η · (y_true - y_pred)</span><br></pre></td></tr></table></figure>
+
+<p>预测正确 → 误差为 0 → 权重不变。预测错了 → 向正确的方向调整权重。这个规则有一个漂亮的数学保证：<strong>感知机收敛定理</strong>——如果数据是线性可分的，感知机保证在有限步内收敛到正确解。</p>
+<h3 id="实现一个感知机"><a href="#实现一个感知机" class="headerlink" title="实现一个感知机"></a>实现一个感知机</h3><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">import</span> numpy <span class="keyword">as</span> np</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Perceptron</span>:</span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">__init__</span>(<span class="params">self, input_dim, lr=<span class="number">0.1</span></span>):</span><br><span class="line">        <span class="variable language_">self</span>.w = np.zeros(input_dim)</span><br><span class="line">        <span class="variable language_">self</span>.b = <span class="number">0.0</span></span><br><span class="line">        <span class="variable language_">self</span>.lr = lr</span><br><span class="line"></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">predict</span>(<span class="params">self, x</span>):</span><br><span class="line">        z = np.dot(<span class="variable language_">self</span>.w, x) + <span class="variable language_">self</span>.b</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span> <span class="keyword">if</span> z &gt;= <span class="number">0</span> <span class="keyword">else</span> <span class="number">0</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">train_one_step</span>(<span class="params">self, x, y_true</span>):</span><br><span class="line">        y_pred = <span class="variable language_">self</span>.predict(x)</span><br><span class="line">        error = y_true - y_pred</span><br><span class="line">        <span class="variable language_">self</span>.w += <span class="variable language_">self</span>.lr * error * x</span><br><span class="line">        <span class="variable language_">self</span>.b += <span class="variable language_">self</span>.lr * error</span><br><span class="line">        <span class="keyword">return</span> error</span><br></pre></td></tr></table></figure>
+
+<p>跑在 AND 数据集上，3 轮就收敛了。四个点全部正确分类，决策边界是一条干净的对角线。</p>
+<h3 id="XOR-问题：第一次-AI-寒冬"><a href="#XOR-问题：第一次-AI-寒冬" class="headerlink" title="XOR 问题：第一次 AI 寒冬"></a>XOR 问题：第一次 AI 寒冬</h3><p>然后来了 XOR（异或）：</p>
+<table>
+<thead>
+<tr>
+<th align="center">输入</th>
+<th align="center">AND</th>
+<th align="center">OR</th>
+<th align="center">XOR</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="center">(0,0)</td>
+<td align="center">0</td>
+<td align="center">0</td>
+<td align="center">0</td>
+</tr>
+<tr>
+<td align="center">(0,1)</td>
+<td align="center">0</td>
+<td align="center">1</td>
+<td align="center"><strong>1</strong></td>
+</tr>
+<tr>
+<td align="center">(1,0)</td>
+<td align="center">0</td>
+<td align="center">1</td>
+<td align="center"><strong>1</strong></td>
+</tr>
+<tr>
+<td align="center">(1,1)</td>
+<td align="center">1</td>
+<td align="center">1</td>
+<td align="center"><strong>0</strong></td>
+</tr>
+</tbody></table>
+<p>XOR 的数据分布是：两个 0 在对角，两个 1 在对角。你无法用一条直线把 0 和 1 分开。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">(0,0)=0  ●         (0,1)=1     ●</span><br><span class="line">                        ╲</span><br><span class="line">(1,0)=1  ●         (1,1)=0     ●</span><br><span class="line">         ╲</span><br><span class="line">  ← 一条直线永远无法同时把这两个 0 和两个 1 分开</span><br></pre></td></tr></table></figure>
+
+<p>感知机跑在 XOR 上，永远无法收敛。Minsky 和 Papert 在 1969 年的《Perceptrons》中严格证明了这一点，直接导致了第一次 AI 寒冬。</p>
+<h3 id="一个重要的澄清"><a href="#一个重要的澄清" class="headerlink" title="一个重要的澄清"></a>一个重要的澄清</h3><p>阶跃函数是非线性的，为什么感知机整体还是线性的？</p>
+<p>因为决策边界由 <code>w·x + b = 0</code> 决定，这是一个线性方程。阶跃函数只是告诉你落在边界的哪一侧，它<strong>不改变边界本身的形状</strong>。就像一把剪刀，只能把纸剪成直线——它没有能力让边界变成曲线。</p>
+<p>非线性激活函数的真正威力，体现在<strong>多层叠加</strong>时。</p>
+<hr>
+<h2 id="第二章-·-多层感知机：突破线性边界"><a href="#第二章-·-多层感知机：突破线性边界" class="headerlink" title="第二章 · 多层感知机：突破线性边界"></a>第二章 · 多层感知机：突破线性边界</h2><h3 id="加一层就够了"><a href="#加一层就够了" class="headerlink" title="加一层就够了"></a>加一层就够了</h3><p>XOR 无法用一条直线分开，但可以用两条直线组合起来：</p>
+<ul>
+<li>直线 A：分开 (0,0) 与其余</li>
+<li>直线 B：分开 (1,1) 与其余</li>
+<li>组合 A 和 B 的结果</li>
+</ul>
+<p>这就是隐藏层的本质。两个感知机的输出组合起来，就能包围出非线性区域。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">输入层(2维)    隐藏层(2个神经元)    输出层(1个神经元)</span><br><span class="line"></span><br><span class="line">   x₁ ──────  h₁ ──\</span><br><span class="line">                     ── y</span><br><span class="line">   x₂ ──────  h₂ ──/</span><br></pre></td></tr></table></figure>
+
+<h3 id="前向传播：逐层计算"><a href="#前向传播：逐层计算" class="headerlink" title="前向传播：逐层计算"></a>前向传播：逐层计算</h3><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># 第一层：输入 → 隐藏层</span></span><br><span class="line">z1 = x @ W1 + b1</span><br><span class="line">h = sigmoid(z1)       <span class="comment"># 非线性激活 ← 不可省略</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># 第二层：隐藏层 → 输出层</span></span><br><span class="line">z2 = h @ W2 + b2</span><br><span class="line">y_pred = sigmoid(z2)</span><br></pre></td></tr></table></figure>
+
+<p>关键问题：如果把 <code>sigmoid(z1)</code> 去掉，<code>h = z1</code>，会发生什么？</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">y = sigmoid( (x@W₁ + b₁)@W₂ + b₂ )</span><br><span class="line">  = sigmoid( x@(W₁@W₂) + (b₁@W₂ + b₂) )</span><br><span class="line">  = sigmoid( x@W&#x27; + b&#x27; )</span><br></pre></td></tr></table></figure>
+
+<p>两层退化为<strong>一层</strong>。表达能力退回到感知机，解决不了 XOR。这就是<strong>非线性激活函数不可替代</strong>的原因——它把输入空间”扭曲”了，让原本线性不可分的数据变得线性可分。</p>
+<h3 id="反向传播：链式法则的递归应用"><a href="#反向传播：链式法则的递归应用" class="headerlink" title="反向传播：链式法则的递归应用"></a>反向传播：链式法则的递归应用</h3><p>反向传播是 MLP 的核心，它本质上就是链式法则从后往前逐层应用。</p>
+<p>从输出层开始：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">dL/dW₂ = dL/dy · dy/dz₂ · dz₂/dW₂</span><br></pre></td></tr></table></figure>
+
+<p>然后传播到隐藏层：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">dL/dW₁ = dL/dy · dy/dz₂ · dz₂/dh · dh/dz₁ · dz₁/dW₁</span><br></pre></td></tr></table></figure>
+
+<p>核心代码实现：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">backward</span>(<span class="params">x, y_true</span>):</span><br><span class="line">    <span class="comment"># === 输出层 ===</span></span><br><span class="line">    dL_dz2 = y_pred - y_true           <span class="comment"># BCE + sigmoid 的梯度</span></span><br><span class="line">    dL_dW2 = h.T @ dL_dz2</span><br><span class="line">    dL_db2 = np.<span class="built_in">sum</span>(dL_dz2, axis=<span class="number">0</span>, keepdims=<span class="literal">True</span>)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># === 隐藏层 ===</span></span><br><span class="line">    dL_dh = dL_dz2 @ W2.T              <span class="comment"># 把误差通过 W₂ᵀ 分配回去</span></span><br><span class="line">    dh_dz1 = sigmoid_derivative(z1)</span><br><span class="line">    dL_dz1 = dL_dh * dh_dz1</span><br><span class="line">    dL_dW1 = x.T @ dL_dz1</span><br><span class="line">    dL_db1 = np.<span class="built_in">sum</span>(dL_dz1, axis=<span class="number">0</span>, keepdims=<span class="literal">True</span>)</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> dL_dW1, dL_db1, dL_dW2, dL_db2</span><br></pre></td></tr></table></figure>
+
+<p>最本质的一行是 <code>dL_dh = dL_dz2 @ W2.T</code>——<strong>误差通过权重的转置从输出层”分配”回隐藏层</strong>。每一个隐藏神经元的误差，是它在输出层所有连接的误差之和。</p>
+<blockquote>
+<p>前向传播用 W，反向传播用 Wᵀ。这是反向传播最优雅的地方。</p>
+</blockquote>
+<hr>
+<h2 id="两个关键设计决策"><a href="#两个关键设计决策" class="headerlink" title="两个关键设计决策"></a>两个关键设计决策</h2><p>当代码的逻辑都写对了、前向和反向传播的矩阵形状也对得上，XOR 仍然可能不收敛。这时问题就不在”代码写没写对”，而在<strong>架构设计选择正确与否</strong>。从零实现的价值正在于此——你会深刻感受到两个关键设计决策的份量。</p>
+<h3 id="损失函数的选择：MSE-还是-BCE？"><a href="#损失函数的选择：MSE-还是-BCE？" class="headerlink" title="损失函数的选择：MSE 还是 BCE？"></a>损失函数的选择：MSE 还是 BCE？</h3><p>用 MSE（均方误差）做分类，梯度是这样的：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">dL/dz = (p - y) · σ&#x27;(z)</span><br><span class="line">         ↑误差信号  ↑被 sigmoid 导数压制</span><br></pre></td></tr></table></figure>
+
+<p>σ’(z) 的最大值是 0.25（在 z&#x3D;0 处）。当 sigmoid 进入饱和区（z 远离 0），σ’(z) 趋近于零。MSE 的梯度始终被乘以一个 ≤ 0.25 的因子。</p>
+<p>用 XOR 的初始值算一下：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">dL/dz2 ≈ [0.247, -0.253, -0.253, 0.247] · 0.25</span><br><span class="line">       ≈ [0.062, -0.063, -0.063, 0.062]</span><br></pre></td></tr></table></figure>
+
+<p>初始梯度被压制到原来的四分之一。再传到隐藏层，又过一层 σ’(z₁)，梯度更弱。网络学不动。</p>
+<p>把损失换成 BCE（二分类交叉熵）：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">dL/dz = p - y</span><br><span class="line">         ↑σ&#x27;(z) 完美抵消了！</span><br></pre></td></tr></table></figure>
+
+<p>BCE 的梯度直接是 <code>y_pred - y_true</code>，sigmoid 的导数在链式法则中被消去了。这不是巧合——<strong>交叉熵配 sigmoid&#x2F;softmax 是专门设计成这样的</strong>，目的就是让梯度不受激活函数饱和的影响，始终反映”错误有多大”。</p>
+<table>
+<thead>
+<tr>
+<th align="left">损失函数</th>
+<th align="left">输出激活</th>
+<th align="right">梯度形式</th>
+<th align="right">初始幅度（XOR）</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">MSE</td>
+<td align="left">sigmoid</td>
+<td align="right"><code>(p-y)·σ&#39;(z)</code></td>
+<td align="right">~0.062</td>
+</tr>
+<tr>
+<td align="left">BCE</td>
+<td align="left">sigmoid</td>
+<td align="right"><code>p - y</code></td>
+<td align="right">~0.5</td>
+</tr>
+<tr>
+<td align="left">交叉熵 (CCE)</td>
+<td align="left">softmax</td>
+<td align="right"><code>p - y</code></td>
+<td align="right">与 BCE 相同</td>
+</tr>
+</tbody></table>
+<p>BCE 的梯度是 MSE 的 8 倍。</p>
+<p><strong>经验法则</strong>：</p>
+<blockquote>
+<p>输出层用 sigmoid&#x2F;softmax → 用交叉熵。输出层是线性激活（回归）→ 用 MSE。</p>
+</blockquote>
+<p>完整的数学推导（BCE + sigmoid 的梯度抵消）：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">L = -ylog(σ(z)) - (1-y)log(1-σ(z))</span><br><span class="line"></span><br><span class="line">dL/dz = -y/σ(z) · σ&#x27;(z) - (1-y)/(1-σ(z)) · (-σ&#x27;(z))</span><br><span class="line">      = -y/σ(z) · σ(z)(1-σ(z)) + (1-y)/(1-σ(z)) · σ(z)(1-σ(z))</span><br><span class="line">      = -y(1-σ(z)) + (1-y)σ(z)</span><br><span class="line">      = σ(z) - y</span><br><span class="line">      = p - y      ✅ 完美消去！</span><br></pre></td></tr></table></figure>
+
+<h3 id="初始化策略的选择：Xavier-还是小随机？"><a href="#初始化策略的选择：Xavier-还是小随机？" class="headerlink" title="初始化策略的选择：Xavier 还是小随机？"></a>初始化策略的选择：Xavier 还是小随机？</h3><p>损失函数选对之后，网络理应能收敛。但实验发现：seed 1 能收敛，seed 42 却卡住了。</p>
+<p>卡住时的输出模式：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">(0,0) → 0.0001 (正确)</span><br><span class="line">(0,1) → 0.4999 (错误！)      ← 卡在中间</span><br><span class="line">(1,0) → 0.9999 (正确)</span><br><span class="line">(1,1) → 0.5001 (错误！)      ← 卡在中间</span><br></pre></td></tr></table></figure>
+
+<p>两个隐藏神经元只有”一个半”在工作——一个正常分化，另一个几乎废了。网络的有效容量从 2 降到了 1，解决不了 XOR。</p>
+<p>原因出在 Xavier 初始化上。Xavier 的公式是 <code>W ~ N(0, √(1/n_in))</code>，它被设计用于<strong>深层网络</strong>——几十上百层的前向和反向传播中，保持信号方差不爆炸不消失。但对于一个 2-2-1 的玩具网络，n_in&#x3D;2，缩放因子 <code>√(1/2) ≈ 0.707</code> 太大了：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">初始 z₁ 值（Xavier，seed 42）：</span><br><span class="line">x=(0,0) → z₁=[0,    0    ] → σ&#x27;(z₁)=0.25, 0.25  ✅</span><br><span class="line">x=(0,1) → z₁=[0.46, 1.08 ] → σ&#x27;(z₁)=0.25, 0.19  ⚠️ 第 2 个神经元部分饱和</span><br><span class="line">x=(1,0) → z₁=[0.35, -0.10] → 还行</span><br><span class="line">x=(1,1) → z₁=[0.81, 0.98 ] → σ&#x27;(z₁)=0.22, 0.19  ⚠️ 第 2 个神经元部分饱和</span><br></pre></td></tr></table></figure>
+
+<p>第 2 个隐藏神经元在 (0,1) 和 (1,1) 上进入 sigmoid 饱和区，梯度被压制。它更新太慢，无法有效分化——网络实际上退化为 1 个有效神经元。</p>
+<p>把缩放改回 <code>*0.1</code>，问题消失：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">z₁ ≈ 0 ~ 0.15  →  sigmoid 全在线性区</span><br><span class="line">σ&#x27;(z₁) ≈ 0.25  →  梯度始终最大，两个神经元都能正常分化</span><br></pre></td></tr></table></figure>
+
+<table>
+<thead>
+<tr>
+<th align="left">初始化</th>
+<th align="left">公式</th>
+<th align="right">对 2 层网络</th>
+<th align="left">对 10+ 层网络</th>
+<th align="left">设计目标</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">小随机</td>
+<td align="left"><code>*0.1</code></td>
+<td align="right">✅ 甜区</td>
+<td align="left">❌ 信号消失</td>
+<td align="left">避免对称性</td>
+</tr>
+<tr>
+<td align="left">Xavier</td>
+<td align="left"><code>√(1/n_in)</code></td>
+<td align="right">⚠️ 可能饱和</td>
+<td align="left">✅ 信号稳定</td>
+<td align="left">保持方差</td>
+</tr>
+<tr>
+<td align="left">He</td>
+<td align="left"><code>√(2/n_in)</code></td>
+<td align="right">❌ 容易饱和</td>
+<td align="left">✅ 适合 ReLU</td>
+<td align="left">ReLU 需补偿</td>
+</tr>
+</tbody></table>
+<p>这三个初始化中没有一个对所有深度都最优——选择取决于网络的层数和激活函数。</p>
+<blockquote>
+<p>Xavier 和 He 初始化是为深层网络设计的——几十上百层的信号传播需要精心控制方差。对 2-3 层的小网络，sigmoid 的饱和问题比信号消失问题更紧迫，小随机权重反而是更可靠的选择。</p>
+</blockquote>
+<h4 id="附：零权重初始化的特殊情况"><a href="#附：零权重初始化的特殊情况" class="headerlink" title="附：零权重初始化的特殊情况"></a>附：零权重初始化的特殊情况</h4><p>如果把所有权重初始化为零，梯度计算如下：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">W₁ = 0 → 所有样本的 h = [0.5, 0.5] 完全一样</span><br><span class="line"></span><br><span class="line">dL_dW₂ = h.T @ dL_dz₂</span><br><span class="line">       = [0.5, 0.5, 0.5, 0.5] @ [+0.5, -0.5, -0.5, +0.5]</span><br><span class="line">       = 0    ← XOR 的误差信号正好完全抵消了！</span><br></pre></td></tr></table></figure>
+
+<p>XOR 的标签分布是对称的：四个样本的误差 <code>[+0.5, -0.5, -0.5, +0.5]</code> 的和为零。当所有 h 相等时，点积等价于求和，结果为零，W₂ 永远不动——梯度也永远传不到 W₁。这是一个双重死锁。</p>
+<p>对比 AND：误差 <code>[+0.5, +0.5, +0.5, -0.5]</code> 的和为 +1.0，W₂ 在第一轮就能更新，第二轮梯度就能流到隐藏层。零初始化不是对所有任务都致命——它对 XOR 这样对称分布的任务才特别危险。</p>
+<hr>
+<h2 id="本章收获"><a href="#本章收获" class="headerlink" title="本章收获"></a>本章收获</h2><h3 id="你实现的总览"><a href="#你实现的总览" class="headerlink" title="你实现的总览"></a>你实现的总览</h3><table>
+<thead>
+<tr>
+<th align="left">组件</th>
+<th align="center">NumPy 手动版</th>
+<th align="center">PyTorch 版</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">感知机（AND&#x2F;OR）</td>
+<td align="center">✅</td>
+<td align="center">✅</td>
+</tr>
+<tr>
+<td align="left">MLP（XOR）</td>
+<td align="center">✅</td>
+<td align="center">✅</td>
+</tr>
+<tr>
+<td align="left">前向传播</td>
+<td align="center">手动矩阵运算</td>
+<td align="center"><code>nn.Linear</code></td>
+</tr>
+<tr>
+<td align="left">反向传播</td>
+<td align="center">手动链式法则</td>
+<td align="center"><code>loss.backward()</code></td>
+</tr>
+<tr>
+<td align="left">权重更新</td>
+<td align="center">梯度下降手写</td>
+<td align="center"><code>optimizer.step()</code></td>
+</tr>
+</tbody></table>
+<h3 id="核心概念清单"><a href="#核心概念清单" class="headerlink" title="核心概念清单"></a>核心概念清单</h3><table>
+<thead>
+<tr>
+<th align="left">概念</th>
+<th align="left">一句话总结</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">感知机</td>
+<td align="left">一个神经元 + 阶跃函数，画一条直线分类</td>
+</tr>
+<tr>
+<td align="left">线性可分性</td>
+<td align="left">能不能用一条直线分开两类数据</td>
+</tr>
+<tr>
+<td align="left">隐藏层</td>
+<td align="left">扭曲输入空间，让线性不可分变得线性可分</td>
+</tr>
+<tr>
+<td align="left">非线性激活函数</td>
+<td align="left">没有它，多层网络退化为单层</td>
+</tr>
+<tr>
+<td align="left">反向传播</td>
+<td align="left">链式法则从后往前，误差通过 Wᵀ 分配回去</td>
+</tr>
+<tr>
+<td align="left">交叉熵 + sigmoid</td>
+<td align="left">完美配对，梯度 &#x3D; p - y，不受饱和影响</td>
+</tr>
+<tr>
+<td align="left">初始化</td>
+<td align="left">太小 → 退化，太大 → 饱和，*0.1 对浅层最优</td>
+</tr>
+</tbody></table>
+<h3 id="这一章的未尽问题"><a href="#这一章的未尽问题" class="headerlink" title="这一章的未尽问题"></a>这一章的未尽问题</h3><blockquote>
+<p>sigmoid 的梯度消失问题随着网络加深越发严重。堆到 4 层、6 层、8 层 sigmoid 网络时，浅层梯度趋近于零，深层网络无法有效训练。</p>
+<p>此外，全连接结构把图像当成平铺向量，完全丢失了空间结构信息。</p>
+<p>怎么办？</p>
+</blockquote>
+<p>带着这两个问题，就准备好进入下一章了——<strong>卷积神经网络</strong>，让网络学会”看”。</p>
+<hr>
+<h2 id="推荐资源"><a href="#推荐资源" class="headerlink" title="推荐资源"></a>推荐资源</h2><ul>
+<li>Dive into Deep Learning（动手学深度学习）：<a target="_blank" rel="noopener" href="https://d2l.ai/">https://d2l.ai</a></li>
+<li>PyTorch 官方教程：<a target="_blank" rel="noopener" href="https://pytorch.org/tutorials">https://pytorch.org/tutorials</a></li>
+<li>CS231n: CNNs for Visual Recognition：<a target="_blank" rel="noopener" href="http://cs231n.stanford.edu/">http://cs231n.stanford.edu</a></li>
+<li>The Annotated Transformer：<a target="_blank" rel="noopener" href="https://nlp.seas.harvard.edu/2018/04/03/attention.html">https://nlp.seas.harvard.edu/2018/04/03/attention.html</a></li>
+</ul>
+<h2 id="CNN-诞生前的-AI-发展史：从第一颗神经元到视觉革命"><a href="#CNN-诞生前的-AI-发展史：从第一颗神经元到视觉革命" class="headerlink" title="CNN 诞生前的 AI 发展史：从第一颗神经元到视觉革命"></a>CNN 诞生前的 AI 发展史：从第一颗神经元到视觉革命</h2><h3 id="第一阶段：萌芽期（1943-1969）——-神经元是什么？"><a href="#第一阶段：萌芽期（1943-1969）——-神经元是什么？" class="headerlink" title="第一阶段：萌芽期（1943-1969）—— 神经元是什么？"></a>第一阶段：萌芽期（1943-1969）—— 神经元是什么？</h3><p><strong>1943 · McCulloch &amp; Pitts</strong><br>两个逻辑学家发表了第一篇关于”神经元”的数学论文。他们证明了一件事：一个简化的神经元模型可以做布尔逻辑运算（AND、OR、NOT）。他们没有做学习——权重是手工设的。</p>
+<p><strong>1949 · Hebb 规则</strong><br>心理学家 Donald Hebb 提出了一个纯粹生物学的猜想：</p>
+<blockquote>
+<p>“一起放电的神经元，连接会增强。”</p>
+</blockquote>
+<p>这就是后来所有学习规则的生物学源头。”Hebbian learning” 四个字，埋下了权值更新的种子。</p>
+<p><strong>1958 · Rosenblatt 的感知机</strong><br>Frank Rosenblatt 做了第一台能<strong>自己学会分类</strong>的机器——Mark I Perceptron。它在硬件上实现了权重的自动调整。这是人工神经网络第一个真正意义上的里程碑。</p>
+<p>当时的氛围非常乐观。《纽约时报》报道：”海军期望这台电子计算机能……行走、说话、看、写、自我复制，并意识到自己的存在。”</p>
+<p><strong>1969 · Minsky &amp; Papert 的《Perceptrons》</strong><br>然后 Minsky 和 Papert 在这本书里严格证明了：单层感知机连 XOR 都解决不了。而且他们指出，如果加多层，当时的计算机算力根本不够训练。</p>
+<p>这本书的两个后果：</p>
+<ol>
+<li><strong>NRC 和 DARPA 大幅削减神经网络研究经费</strong> → 第一次 AI 寒冬</li>
+<li>研究社区分流了——一部分人转向了符号主义和专家系统</li>
+</ol>
+<blockquote>
+<p>这个分流极其重要：早期 AI 从一开始就分成了两条路——<strong>符号主义</strong>（用逻辑规则表示知识）和<strong>连接主义</strong>（用神经网络模拟大脑）。感知机受挫后，连接主义进入了低谷，符号主义主导了 70-80 年代。</p>
+</blockquote>
+<hr>
+<h3 id="第二阶段：寒冬与暗流（1970-1985）——-没人叫它”深度学习”"><a href="#第二阶段：寒冬与暗流（1970-1985）——-没人叫它”深度学习”" class="headerlink" title="第二阶段：寒冬与暗流（1970-1985）—— 没人叫它”深度学习”"></a>第二阶段：寒冬与暗流（1970-1985）—— 没人叫它”深度学习”</h3><p><strong>1974 · Werbos 的博士论文</strong><br>一个名叫 Paul Werbos 的博士生在他的论文里完整推导了<strong>反向传播算法</strong>。但没人读——没人相信神经网络还有前途，而且当时的计算机跑不动 BP。</p>
+<p><strong>1980 · 福岛邦彦的 Neocognitron</strong><br>真正值得注意的工作之一。福岛邦彦受生物视觉皮层的启发，提出了一个<strong>层级化的、局部连接的</strong>神经网络结构——Neocognitron。它已经是 CNN 的雏形了：</p>
+<ul>
+<li>局部感受野</li>
+<li>权值共享（虽然用的是无监督的竞争学习）</li>
+<li>层级特征提取</li>
+</ul>
+<p>但 Neocognitron 没有用反向传播训练，用的是手工设计的无监督规则。它没有掀起波澜。</p>
+<p><strong>1982 · Hopfield 网络</strong><br>物理学家 John Hopfield 发表了一篇论文，用统计物理的工具分析了一种新型网络。他的关键贡献不是网络结构本身，而是<strong>证明了神经网络可以用物理学的形式化工具来理解和分析</strong>——这给了神经网络学术合法性。</p>
+<hr>
+<h3 id="第三阶段：复活（1986-1989）——-三个里程碑"><a href="#第三阶段：复活（1986-1989）——-三个里程碑" class="headerlink" title="第三阶段：复活（1986-1989）—— 三个里程碑"></a>第三阶段：复活（1986-1989）—— 三个里程碑</h3><p><strong>1986 · 反向传播被”重新发现”</strong><br>Rumelhart, Hinton 和 Williams 发表了一篇论文，把 Werbos 的反向传播以一种清晰的、实验验证的方式展示给世界。他们用 BP 训练了一个三层网络，成功解决了 XOR。</p>
+<p>这个论文引发了<strong>连接主义的复兴</strong>，史称”第二次神经网络浪潮”。1986-1989 年间，关于 BP 的论文数量和 GPU 时代的论文增长速度差不多。</p>
+<p><strong>1988 · Yann LeCun 来到 Bell Labs</strong><br>Yann LeCun 在 Bell Labs 做手写支票识别。当时的系统用人工设计的特征提取器（Sobel 边缘检测、HOG 特征等）+ 传统的分类器。</p>
+<p>LeCun 的想法：<strong>能不能让网络自己学特征？</strong></p>
+<p><strong>1989 · 第一个 CNN</strong><br>LeCun 把福岛邦彦的局部连接思想和反向传播结合在一起，发表了第一个 CNN 的原型——<strong>ConvNet</strong>。它在手写数字识别上达到了当时最好的结果。</p>
+<p><em>LeNet 的核心创新：</em></p>
+<table>
+<thead>
+<tr>
+<th align="left">设计</th>
+<th align="left">解决的问题</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">局部连接（卷积核）</td>
+<td align="left">每个神经元只看一小块区域，而不是整张图</td>
+</tr>
+<tr>
+<td align="left">权值共享</td>
+<td align="left">同一个卷积核扫遍整张图 → 参数量大减</td>
+</tr>
+<tr>
+<td align="left">池化（下采样）</td>
+<td align="left">降低分辨率，获得平移不变性</td>
+</tr>
+<tr>
+<td align="left">多个卷积层堆叠</td>
+<td align="left">低层学边缘、高层学部件</td>
+</tr>
+</tbody></table>
+<p>1989 年的 CNN 已经可以在 MNIST 上达到 99% 的准确率。</p>
+<p><strong>那为什么 CNN 没有在 1989 年就统治世界？</strong></p>
+<hr>
+<h3 id="第四阶段：第二次冬天与潜伏（1990-2005）——-CNN-存在但没有爆发的原因"><a href="#第四阶段：第二次冬天与潜伏（1990-2005）——-CNN-存在但没有爆发的原因" class="headerlink" title="第四阶段：第二次冬天与潜伏（1990-2005）—— CNN 存在但没有爆发的原因"></a>第四阶段：第二次冬天与潜伏（1990-2005）—— CNN 存在但没有爆发的原因</h3><p><strong>原因 1：算力</strong><br>1989 年训练一个 CNN 在手写数字上要跑<strong>三天</strong>。一台 486 电脑要跑一个多星期才能完成一次 MNIST 训练。对比之下，SVM 只需要几分钟。</p>
+<p><strong>原因 2：数据</strong><br>MNIST 只有 70,000 张灰度图。要训练一个”真的有用”的视觉系统，需要百万级、有标签、多样化的数据。当时没有互联网级别的数据集。</p>
+<p><strong>原因 3：理论的优雅性</strong><br>90 年代 Vapnik 提出了<strong>支持向量机（SVM）</strong>，它有精美的凸优化理论、有 VC 维的理论保证。核技巧（Kernel Trick）让 SVM 也能处理非线性问题，而且<strong>不需要调那么多超参数</strong>。相比之下，神经网络被视为”调参艺术”：选择合适的层数、神经元数、学习率、初始化、正则化……成功的门槛太高了。</p>
+<p>所以 90 年代到 00 年代中期：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">研究社区的分化：</span><br><span class="line"></span><br><span class="line">Neural Networks（神经网络）</span><br><span class="line">  ├── SVM / Kernel Methods</span><br><span class="line">  ├── Decision Trees / Random Forests</span><br><span class="line">  ├── Graphical Models / Bayesian Networks</span><br><span class="line">  └── ....</span><br><span class="line">  </span><br><span class="line">CNN 只留在了一个很小的圈子里——手写识别、OCR、文档分析</span><br></pre></td></tr></table></figure>
+
+<p><strong>原因 4：sigmoid 的梯度消失</strong><br>即使有人想堆更深的 CNN，sigmoid（或者 tanh）导致的梯度消失问题让 &gt;5 层的网络几乎无法训练。</p>
+<blockquote>
+<p>这是一个死锁：你要处理复杂图像就需要更多层，但更多层在 sigmoid 下训练不了。</p>
+</blockquote>
+<hr>
+<h3 id="第五阶段：破晓（2006-2012）——-三件事改变了历史"><a href="#第五阶段：破晓（2006-2012）——-三件事改变了历史" class="headerlink" title="第五阶段：破晓（2006-2012）—— 三件事改变了历史"></a>第五阶段：破晓（2006-2012）—— 三件事改变了历史</h3><p><strong>2006 · Hinton 的深度信念网络</strong><br>Hinton 发表了一篇论文，提出了一种”逐层预训练”的方法：先用无监督的方式训练每一层 RBM（受限玻尔兹曼机），再用监督微调。他成功训练了一个 7 层网络，并给它起了一个新名字——<strong>Deep Learning</strong>。</p>
+<p>这个论文的影响力不在于这个方法多么实用（后来被证明大多情况下不如直接随机初始化 + ReLU + 大数据的组合），而在于它<strong>重新激活了”深层”这个想法</strong>。人们又开始相信”更深”是有可能的。</p>
+<p><strong>2009 · ImageNet 的诞生</strong><br>李飞飞和她的学生发布了一个空前规模的图像数据集：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">ImageNet: 1500 万张图片，22000 个类别</span><br><span class="line">MNIST:   7 万张图片，   10 个类别</span><br><span class="line">          ↑ 200 倍的差距</span><br></pre></td></tr></table></figure>
+
+<p>数据集的存在不是让算法更好——它是<strong>检验算法是否能够规模化</strong>的试金石。你在 MNIST 上跑 99.5% 的算法，在 ImageNet 上可能只有 10%。</p>
+<p><strong>2012 · AlexNet —— CNN 的引爆点</strong><br>Alex Krizhevsky、Ilya Sutskever 和 Geoffrey Hinton 提交了 ImageNet 竞赛的参赛作品——一个 8 层的 CNN，叫 AlexNet。</p>
+<p>AlexNet 的创新不是革命性的，而是工程上的聪明组合：</p>
+<table>
+<thead>
+<tr>
+<th align="left">组件</th>
+<th align="left">AlexNet 做了啥</th>
+<th align="left">解决了什么</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left"><strong>ReLU</strong></td>
+<td align="left">用 <code>max(0, x)</code> 替代 sigmoid</td>
+<td align="left">梯度消失大幅缓解，训练速度提升 6 倍</td>
+</tr>
+<tr>
+<td align="left"><strong>GPU</strong></td>
+<td align="left">两块 GTX 580 并行计算</td>
+<td align="left">把训练时间从几周缩短到几天</td>
+</tr>
+<tr>
+<td align="left"><strong>Dropout</strong></td>
+<td align="left">随机丢弃 50% 的神经元</td>
+<td align="left">有效防止过拟合（1.2 亿参数 vs 130 万训练样本）</td>
+</tr>
+<tr>
+<td align="left"><strong>数据增强</strong></td>
+<td align="left">随机裁剪、翻转、颜色变化</td>
+<td align="left">等价于扩大了训练集</td>
+</tr>
+<tr>
+<td align="left"><strong>ReLU 的稀疏性</strong></td>
+<td align="left">很多神经元输出 0 → 计算更快</td>
+<td align="left">实践中加速效果显著</td>
+</tr>
+</tbody></table>
+<p>AlexNet 在 ImageNet 2012 竞赛上的 top-5 错误率：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">2011 年冠军（SVM + 手工特征）: 25.8%</span><br><span class="line">AlexNet (2012):                 16.4%  ← 直接降了 9.4 个百分点</span><br></pre></td></tr></table></figure>
+
+<p>对于一个每年进步 1-2% 的竞赛来说，这是一次<strong>断层式的超越</strong>。</p>
+<hr>
+<h3 id="为什么是-2012-年，不是-1989-年？"><a href="#为什么是-2012-年，不是-1989-年？" class="headerlink" title="为什么是 2012 年，不是 1989 年？"></a>为什么是 2012 年，不是 1989 年？</h3><p>如果把 1989 年 LeCun 的 CNN 和 2012 年 AlexNet 对比：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">1989             →        2012</span><br><span class="line">sigmoid/Tanh     →        ReLU</span><br><span class="line">CPU 训练 3 天    →        GPU 训练 5 天</span><br><span class="line">7 万张 32x32 图  →        130 万张 224x224 图</span><br><span class="line">没有 Dropout     →        Dropout + 数据增强</span><br><span class="line">比 SVM 好一点    →        超过第二名 10 个百分点</span><br><span class="line">学术界掌声       →        工业界震动</span><br></pre></td></tr></table></figure>
+
+<p>核心变量的变化：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">算力 × 1000        (摩尔定律 + GPU 通用计算)</span><br><span class="line">数据 × 1000        (互联网 + ImageNet)</span><br><span class="line">算法 × 3            (ReLU + Dropout + 数据增强)</span><br><span class="line">                      ↑</span><br><span class="line">              这三个因素在 2012 年交叉到了同一个点上</span><br></pre></td></tr></table></figure>
+
+<hr>
+<h3 id="从这段历史中能学到什么"><a href="#从这段历史中能学到什么" class="headerlink" title="从这段历史中能学到什么"></a>从这段历史中能学到什么</h3><ol>
+<li><p><strong>结构早于训练方法</strong>。福岛 1980 年就有了 CNN 的雏形，但直到 BP + ReLU + GPU 才让它在真实数据上有效。架构的价值 &#x3D; 结构 × 训练效率 × 可用算力。</p>
+</li>
+<li><p><strong>工程比创新更难</strong>。AlexNet 的所有组件（卷积、池化、ReLU、Dropout）都不是它发明的，但它第一个把它们组合在一起并在大规模上验证有效。落地的价值不亚于提出一个新概念。</p>
+</li>
+<li><p><strong>数据是推背感</strong>。ImageNet 之前最好的视觉方法在小型数据集上看起来很接近，但到了真实规模就显出了差距。大的数据集让简单算法也能超过精心调参的小模型。</p>
+</li>
+<li><p><strong>时代需要正确的激励</strong>。90 年代的 SVM 有优美的理论，2000 年代的 ImageNet 竞赛提供了清晰的排行榜和目标。竞赛驱动的进步往往比学术品味更有效。</p>
+</li>
+<li><p><strong>冬天是养分</strong>。80 年代中期和 90 年代末的 AI 冬天并不是真正的”死亡”——它们把研究资源从短期繁荣推向长期积累。LeCun 在 Bell Labs 的安静岁月、Hinton 在 Toronto 的持续坚持，都是在冬天里埋下的种子。</p>
+</li>
+</ol>
+</article><div class="post-copyright"><div class="post-copyright__author"><span class="post-copyright-meta"><i class="fas fa-circle-user fa-fw"></i>文章作者: </span><span class="post-copyright-info"><a href="https://ashleyduo.github.io">Ashley</a></span></div><div class="post-copyright__type"><span class="post-copyright-meta"><i class="fas fa-square-arrow-up-right fa-fw"></i>文章链接: </span><span class="post-copyright-info"><a href="https://ashleyduo.github.io/2026/06/26/%E4%BB%8E%E6%84%9F%E7%9F%A5%E6%9C%BA%E5%88%B0%E5%A4%9A%E5%B1%82%E7%BD%91%E7%BB%9C/">https://ashleyduo.github.io/2026/06/26/%E4%BB%8E%E6%84%9F%E7%9F%A5%E6%9C%BA%E5%88%B0%E5%A4%9A%E5%B1%82%E7%BD%91%E7%BB%9C/</a></span></div><div class="post-copyright__notice"><span class="post-copyright-meta"><i class="fas fa-circle-exclamation fa-fw"></i>版权声明: </span><span class="post-copyright-info">本博客所有文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank">CC BY-NC-SA 4.0</a> 许可协议。转载请注明来源 <a href="https://ashleyduo.github.io" target="_blank">Ashley's Notebook</a>！</span></div></div><div class="tag_share"><div class="post-meta__tag-list"><a class="post-meta__tags" href="/tags/%E6%84%9F%E7%9F%A5%E6%9C%BA%EF%BC%8C%E6%BF%80%E6%B4%BB%E5%87%BD%E6%95%B0%EF%BC%8C%E6%8D%9F%E5%A4%B1%E5%87%BD%E6%95%B0/">感知机，激活函数，损失函数</a></div><div class="post-share"><div class="social-share" data-image="/img/butterfly-icon.png" data-sites="facebook,x,wechat,weibo,qq"></div><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/css/share.min.css" media="print" onload="this.media='all'"><script src="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/js/social-share.min.js" defer></script></div></div><nav class="pagination-post" id="pagination"><a class="pagination-related" href="/2026/06/27/%E7%94%A8MLP%E8%AF%86%E5%88%AB%E6%89%8B%E5%86%99%E6%95%B0%E5%AD%97/" title="第二章 MNIST数字识别实验"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info"><div class="info-1"><div class="info-item-1">上一篇</div><div class="info-item-2">第二章 MNIST数字识别实验</div></div><div class="info-2"><div class="info-item-1">用 MLP 识别手写数字：能力与边界的实验报告 在进入 CNN 之前，亲手感受全连接网络能做什么、不能做什么、以及为什么它必然让位给卷积结构。   引言如果你刚手动实现完反向传播，解决了 XOR，下一步该做什么？ 很多教程会直接跳到 CNN，告诉你”卷积核提取特征、池化降维、全连接分类”，像念经一样。但如果你没有亲手感受过全连接网络处理图像时的挣扎，你不会真正理解卷积结构到底解决了什么问题。 这篇文章记录了一系列实验：用一个简单 MLP 在 MNIST 手写数字数据集上做分类，然后从多个角度拷问它——数据增强能帮多少？它错在哪？它对噪声和随机输入如何反应？更深是否等于更好？全做完之后，你会清楚地看到 MLP 的边界在哪里，以及为什么下一个结构——卷积神经网络——是必然的选择。  实验设定数据集MNIST：70,000 张 28×28 的灰度手写数字图（60,000 训练 &#x2F; 10,000 测试），10 个类别（0-9）。它是深度学习的”Hello World”——足够简单到快速实验，又足够复杂到暴露模型的短板。 模型结构一个 3 层 MLP： 1输入(784) → 隐藏...</div></div></div></a><a class="pagination-related" href="/2026/06/26/numpy-pytorch%E6%95%B0%E6%8D%AE%E6%A0%BC%E5%BC%8F/" title="numpy&amp;pytorch数据格式"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info text-right"><div class="info-1"><div class="info-item-1">下一篇</div><div class="info-item-2">numpy&pytorch数据格式</div></div><div class="info-2"><div class="info-item-1">NumPy 数据类型   类别 类型 描述 位宽 别名 数据格式 数据范围    浮点型 float16 半精度浮点 16 bit half 1符 + 5指 + 10尾 ±65504 &#x2F; 5.96×10⁻⁸    float32 单精度浮点 32 bit float, single 1符 + 8指 + 23尾 ±3.40×10³⁸ &#x2F; 1.18×10⁻³⁸    float64 双精度浮点 64 bit double 1符 + 11指 + 52尾 ±1.80×10³⁰⁸ &#x2F; 2.23×10⁻³⁰⁸    float128 四精度浮点 (平台相关) 128 bit longdouble 1符 + 15指 + 112尾 ±1.19×10⁴⁹³² &#x2F; 3.36×10⁻⁴⁹³²   整型(有符号) int8 8位有符号整数 8 bit byte 1符(补码) + 7数值 -128 ~ 127    int16 16位有符号整数 16 bit short 1符(补码) + 15数值 -32,768 ~ 32,767    int32 32位有符号整数...</div></div></div></a></nav></div><div class="aside-content" id="aside-content"><div class="card-widget card-info text-center"><div class="avatar-img"><img src="/img/butterfly-icon.png" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><div class="author-info-name">Ashley</div><div class="author-info-description"></div><div class="site-data"><a href="/archives/"><div class="headline">文章</div><div class="length-num">7</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">12</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">2</div></a></div><a id="card-info-btn" target="_blank" rel="noopener" href="https://github.com/xxxxxx"><i class="fab fa-github"></i><span>Follow Me</span></a></div><div class="card-widget card-announcement"><div class="item-headline"><i class="fas fa-bullhorn fa-shake"></i><span>公告</span></div><div class="announcement_content">This is my Blog</div></div><div class="sticky_layout"><div class="card-widget" id="card-toc"><div class="item-headline"><i class="fas fa-stream"></i><span>目录</span><span class="toc-percentage"></span></div><div class="toc-content"><ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link" href="#%E7%AC%AC%E4%B8%80%E7%AB%A0-%E7%AC%AC%E4%BA%8C%E7%AB%A0-%E4%BB%8E%E6%84%9F%E7%9F%A5%E6%9C%BA%E5%88%B0%E5%A4%9A%E5%B1%82%E7%BD%91%E7%BB%9C%EF%BC%9A%E6%89%8B%E5%8A%A8%E5%AE%9E%E7%8E%B0%E5%8F%8D%E5%90%91%E4%BC%A0%E6%92%AD%E7%9A%84%E6%97%85%E7%A8%8B"><span class="toc-number">1.</span> <span class="toc-text">第一章&#x2F;第二章 从感知机到多层网络：手动实现反向传播的旅程</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%BC%95%E8%A8%80"><span class="toc-number">1.1.</span> <span class="toc-text">引言</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E7%AC%AC%E4%B8%80%E7%AB%A0-%C2%B7-%E6%84%9F%E7%9F%A5%E6%9C%BA%EF%BC%9A%E4%B8%80%E5%88%87%E7%9A%84%E8%B5%B7%E7%82%B9"><span class="toc-number">1.2.</span> <span class="toc-text">第一章 · 感知机：一切的起点</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E7%A5%9E%E7%BB%8F%E5%85%83%E5%8D%B3%E7%BA%BF%E6%80%A7%E4%BA%8C%E5%88%86%E7%B1%BB%E5%99%A8"><span class="toc-number">1.2.1.</span> <span class="toc-text">神经元即线性二分类器</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%AD%A6%E4%B9%A0%E8%A7%84%E5%88%99%EF%BC%9A%E7%8A%AF%E9%94%99%E6%89%8D%E6%94%B9"><span class="toc-number">1.2.2.</span> <span class="toc-text">学习规则：犯错才改</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%AE%9E%E7%8E%B0%E4%B8%80%E4%B8%AA%E6%84%9F%E7%9F%A5%E6%9C%BA"><span class="toc-number">1.2.3.</span> <span class="toc-text">实现一个感知机</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#XOR-%E9%97%AE%E9%A2%98%EF%BC%9A%E7%AC%AC%E4%B8%80%E6%AC%A1-AI-%E5%AF%92%E5%86%AC"><span class="toc-number">1.2.4.</span> <span class="toc-text">XOR 问题：第一次 AI 寒冬</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E4%B8%80%E4%B8%AA%E9%87%8D%E8%A6%81%E7%9A%84%E6%BE%84%E6%B8%85"><span class="toc-number">1.2.5.</span> <span class="toc-text">一个重要的澄清</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E7%AC%AC%E4%BA%8C%E7%AB%A0-%C2%B7-%E5%A4%9A%E5%B1%82%E6%84%9F%E7%9F%A5%E6%9C%BA%EF%BC%9A%E7%AA%81%E7%A0%B4%E7%BA%BF%E6%80%A7%E8%BE%B9%E7%95%8C"><span class="toc-number">1.3.</span> <span class="toc-text">第二章 · 多层感知机：突破线性边界</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%8A%A0%E4%B8%80%E5%B1%82%E5%B0%B1%E5%A4%9F%E4%BA%86"><span class="toc-number">1.3.1.</span> <span class="toc-text">加一层就够了</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%89%8D%E5%90%91%E4%BC%A0%E6%92%AD%EF%BC%9A%E9%80%90%E5%B1%82%E8%AE%A1%E7%AE%97"><span class="toc-number">1.3.2.</span> <span class="toc-text">前向传播：逐层计算</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%8F%8D%E5%90%91%E4%BC%A0%E6%92%AD%EF%BC%9A%E9%93%BE%E5%BC%8F%E6%B3%95%E5%88%99%E7%9A%84%E9%80%92%E5%BD%92%E5%BA%94%E7%94%A8"><span class="toc-number">1.3.3.</span> <span class="toc-text">反向传播：链式法则的递归应用</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%B8%A4%E4%B8%AA%E5%85%B3%E9%94%AE%E8%AE%BE%E8%AE%A1%E5%86%B3%E7%AD%96"><span class="toc-number">1.4.</span> <span class="toc-text">两个关键设计决策</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E6%8D%9F%E5%A4%B1%E5%87%BD%E6%95%B0%E7%9A%84%E9%80%89%E6%8B%A9%EF%BC%9AMSE-%E8%BF%98%E6%98%AF-BCE%EF%BC%9F"><span class="toc-number">1.4.1.</span> <span class="toc-text">损失函数的选择：MSE 还是 BCE？</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%88%9D%E5%A7%8B%E5%8C%96%E7%AD%96%E7%95%A5%E7%9A%84%E9%80%89%E6%8B%A9%EF%BC%9AXavier-%E8%BF%98%E6%98%AF%E5%B0%8F%E9%9A%8F%E6%9C%BA%EF%BC%9F"><span class="toc-number">1.4.2.</span> <span class="toc-text">初始化策略的选择：Xavier 还是小随机？</span></a><ol class="toc-child"><li class="toc-item toc-level-4"><a class="toc-link" href="#%E9%99%84%EF%BC%9A%E9%9B%B6%E6%9D%83%E9%87%8D%E5%88%9D%E5%A7%8B%E5%8C%96%E7%9A%84%E7%89%B9%E6%AE%8A%E6%83%85%E5%86%B5"><span class="toc-number">1.4.2.1.</span> <span class="toc-text">附：零权重初始化的特殊情况</span></a></li></ol></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E6%9C%AC%E7%AB%A0%E6%94%B6%E8%8E%B7"><span class="toc-number">1.5.</span> <span class="toc-text">本章收获</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E4%BD%A0%E5%AE%9E%E7%8E%B0%E7%9A%84%E6%80%BB%E8%A7%88"><span class="toc-number">1.5.1.</span> <span class="toc-text">你实现的总览</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E6%A0%B8%E5%BF%83%E6%A6%82%E5%BF%B5%E6%B8%85%E5%8D%95"><span class="toc-number">1.5.2.</span> <span class="toc-text">核心概念清单</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E8%BF%99%E4%B8%80%E7%AB%A0%E7%9A%84%E6%9C%AA%E5%B0%BD%E9%97%AE%E9%A2%98"><span class="toc-number">1.5.3.</span> <span class="toc-text">这一章的未尽问题</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E6%8E%A8%E8%8D%90%E8%B5%84%E6%BA%90"><span class="toc-number">1.6.</span> <span class="toc-text">推荐资源</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#CNN-%E8%AF%9E%E7%94%9F%E5%89%8D%E7%9A%84-AI-%E5%8F%91%E5%B1%95%E5%8F%B2%EF%BC%9A%E4%BB%8E%E7%AC%AC%E4%B8%80%E9%A2%97%E7%A5%9E%E7%BB%8F%E5%85%83%E5%88%B0%E8%A7%86%E8%A7%89%E9%9D%A9%E5%91%BD"><span class="toc-number">1.7.</span> <span class="toc-text">CNN 诞生前的 AI 发展史：从第一颗神经元到视觉革命</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E7%AC%AC%E4%B8%80%E9%98%B6%E6%AE%B5%EF%BC%9A%E8%90%8C%E8%8A%BD%E6%9C%9F%EF%BC%881943-1969%EF%BC%89%E2%80%94%E2%80%94-%E7%A5%9E%E7%BB%8F%E5%85%83%E6%98%AF%E4%BB%80%E4%B9%88%EF%BC%9F"><span class="toc-number">1.7.1.</span> <span class="toc-text">第一阶段：萌芽期（1943-1969）—— 神经元是什么？</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E7%AC%AC%E4%BA%8C%E9%98%B6%E6%AE%B5%EF%BC%9A%E5%AF%92%E5%86%AC%E4%B8%8E%E6%9A%97%E6%B5%81%EF%BC%881970-1985%EF%BC%89%E2%80%94%E2%80%94-%E6%B2%A1%E4%BA%BA%E5%8F%AB%E5%AE%83%E2%80%9D%E6%B7%B1%E5%BA%A6%E5%AD%A6%E4%B9%A0%E2%80%9D"><span class="toc-number">1.7.2.</span> <span class="toc-text">第二阶段：寒冬与暗流（1970-1985）—— 没人叫它”深度学习”</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E7%AC%AC%E4%B8%89%E9%98%B6%E6%AE%B5%EF%BC%9A%E5%A4%8D%E6%B4%BB%EF%BC%881986-1989%EF%BC%89%E2%80%94%E2%80%94-%E4%B8%89%E4%B8%AA%E9%87%8C%E7%A8%8B%E7%A2%91"><span class="toc-number">1.7.3.</span> <span class="toc-text">第三阶段：复活（1986-1989）—— 三个里程碑</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E7%AC%AC%E5%9B%9B%E9%98%B6%E6%AE%B5%EF%BC%9A%E7%AC%AC%E4%BA%8C%E6%AC%A1%E5%86%AC%E5%A4%A9%E4%B8%8E%E6%BD%9C%E4%BC%8F%EF%BC%881990-2005%EF%BC%89%E2%80%94%E2%80%94-CNN-%E5%AD%98%E5%9C%A8%E4%BD%86%E6%B2%A1%E6%9C%89%E7%88%86%E5%8F%91%E7%9A%84%E5%8E%9F%E5%9B%A0"><span class="toc-number">1.7.4.</span> <span class="toc-text">第四阶段：第二次冬天与潜伏（1990-2005）—— CNN 存在但没有爆发的原因</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E7%AC%AC%E4%BA%94%E9%98%B6%E6%AE%B5%EF%BC%9A%E7%A0%B4%E6%99%93%EF%BC%882006-2012%EF%BC%89%E2%80%94%E2%80%94-%E4%B8%89%E4%BB%B6%E4%BA%8B%E6%94%B9%E5%8F%98%E4%BA%86%E5%8E%86%E5%8F%B2"><span class="toc-number">1.7.5.</span> <span class="toc-text">第五阶段：破晓（2006-2012）—— 三件事改变了历史</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E6%98%AF-2012-%E5%B9%B4%EF%BC%8C%E4%B8%8D%E6%98%AF-1989-%E5%B9%B4%EF%BC%9F"><span class="toc-number">1.7.6.</span> <span class="toc-text">为什么是 2012 年，不是 1989 年？</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E4%BB%8E%E8%BF%99%E6%AE%B5%E5%8E%86%E5%8F%B2%E4%B8%AD%E8%83%BD%E5%AD%A6%E5%88%B0%E4%BB%80%E4%B9%88"><span class="toc-number">1.7.7.</span> <span class="toc-text">从这段历史中能学到什么</span></a></li></ol></li></ol></li></ol></div></div><div class="card-widget card-recent-post"><div class="item-headline"><i class="fas fa-history"></i><span>最新文章</span></div><div class="aside-list"><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/06/27/%E7%94%A8MLP%E8%AF%86%E5%88%AB%E6%89%8B%E5%86%99%E6%95%B0%E5%AD%97/" title="第二章 MNIST数字识别实验">第二章 MNIST数字识别实验</a><time datetime="2026-06-26T16:42:00.000Z" title="发表于 2026-06-27 00:42:00">2026-06-27</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/06/26/%E4%BB%8E%E6%84%9F%E7%9F%A5%E6%9C%BA%E5%88%B0%E5%A4%9A%E5%B1%82%E7%BD%91%E7%BB%9C/" title="第一章/第二章 从感知机到多层网络">第一章/第二章 从感知机到多层网络</a><time datetime="2026-06-26T14:59:46.000Z" title="发表于 2026-06-26 22:59:46">2026-06-26</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/06/26/numpy-pytorch%E6%95%B0%E6%8D%AE%E6%A0%BC%E5%BC%8F/" title="numpy&amp;pytorch数据格式">numpy&amp;pytorch数据格式</a><time datetime="2026-06-26T12:34:46.000Z" title="发表于 2026-06-26 20:34:46">2026-06-26</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/06/26/MoE%E6%B7%B7%E5%90%88%E4%B8%93%E5%AE%B6%E6%A8%A1%E5%9E%8B%E7%AC%94%E8%AE%B0-%E4%BB%8E%E6%9E%B6%E6%9E%84%E5%88%B0%E6%8E%A8%E7%90%86/" title="MoE 混合专家模型笔记 · 从架构到推理">MoE 混合专家模型笔记 · 从架构到推理</a><time datetime="2026-06-26T02:00:00.000Z" title="发表于 2026-06-26 10:00:00">2026-06-26</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/06/25/%E6%B7%B1%E5%BA%A6%E5%AD%A6%E4%B9%A0%E8%AE%A1%E5%88%92/" title="深度学习计划">深度学习计划</a><time datetime="2026-06-25T14:56:12.000Z" title="发表于 2026-06-25 22:56:12">2026-06-25</time></div></div></div></div></div></div></main><footer id="footer"><div class="footer-other"><div class="footer-copyright"><span class="copyright">&copy;&nbsp;2025 - 2026 By Ashley</span><span class="framework-info"><span>框架 </span><a target="_blank" rel="noopener" href="https://hexo.io">Hexo 8.1.2</a><span class="footer-separator">|</span><span>主题 </span><a target="_blank" rel="noopener" href="https://github.com/jerryc127/hexo-theme-butterfly">Butterfly 5.5.5</a></span></div></div></footer></div><div id="rightside"><div id="rightside-config-hide"><button id="readmode" type="button" title="阅读模式"><i class="fas fa-book-open"></i></button><button id="darkmode" type="button" title="日间和夜间模式切换"><i class="fas fa-adjust"></i></button><button id="hide-aside-btn" type="button" title="单栏和双栏切换"><i class="fas fa-arrows-alt-h"></i></button></div><div id="rightside-config-show"><button id="rightside-config" type="button" title="设置"><i class="fas fa-cog fa-spin"></i></button><button class="close" id="mobile-toc-button" type="button" title="目录"><i class="fas fa-list-ul"></i></button><button id="go-up" type="button" title="回到顶部"><span class="scroll-percent"></span><i class="fas fa-arrow-up"></i></button></div></div><div><script src="/js/utils.js?v=5.5.5"></script><script src="/js/main.js?v=5.5.5"></script><div class="js-pjax"></div><script async data-pjax src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script></div></body></html>
